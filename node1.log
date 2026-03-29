@@ -1,0 +1,27 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.5)
+
+2026-03-29T19:45:35.338+05:30  INFO 42725 --- [           main] c.m.k.DistributedKvStoreApplication      : Starting DistributedKvStoreApplication v0.0.1-SNAPSHOT using Java 25 with PID 42725 (/Users/manaschintawar/Downloads/Distributed_Key_Value_store/target/distributed-kv-store-0.0.1-SNAPSHOT.jar started by manaschintawar in /Users/manaschintawar/Downloads/Distributed_Key_Value_store)
+2026-03-29T19:45:35.341+05:30  INFO 42725 --- [           main] c.m.k.DistributedKvStoreApplication      : No active profile set, falling back to 1 default profile: "default"
+2026-03-29T19:45:35.828+05:30  INFO 42725 --- [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-03-29T19:45:35.846+05:30  INFO 42725 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-03-29T19:45:35.847+05:30  INFO 42725 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-03-29T19:45:35.862+05:30  INFO 42725 --- [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 497 ms
+2026-03-29T19:45:35.929+05:30  INFO 42725 --- [           main] c.m.kvstore.storage.WALManager           : WAL Initialized at ./data/wal_8080.log
+2026-03-29T19:45:35.991+05:30  INFO 42725 --- [           main] c.m.kvstore.storage.StorageEngine        : Starting restoration process...
+2026-03-29T19:45:36.010+05:30  INFO 42725 --- [           main] c.m.kvstore.storage.StorageEngine        : Restored 2 keys from snapshot.
+2026-03-29T19:45:36.011+05:30  INFO 42725 --- [           main] c.m.kvstore.storage.StorageEngine        : Replayed 5 operations from WAL.
+2026-03-29T19:45:36.171+05:30  INFO 42725 --- [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-03-29T19:45:36.181+05:30  INFO 42725 --- [           main] c.m.k.DistributedKvStoreApplication      : Started DistributedKvStoreApplication in 1.087 seconds (process running for 1.381)
+2026-03-29T19:45:36.316+05:30  INFO 42725 --- [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-03-29T19:45:36.317+05:30  INFO 42725 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-03-29T19:45:36.317+05:30  INFO 42725 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 0 ms
+2026-03-29T19:50:36.016+05:30  INFO 42725 --- [pool-3-thread-1] c.m.kvstore.storage.StorageEngine        : Taking background snapshot...
+2026-03-29T19:50:36.030+05:30  INFO 42725 --- [pool-3-thread-1] c.m.kvstore.storage.SnapshotManager      : Snapshot saved successfully to /Users/manaschintawar/Downloads/Distributed_Key_Value_store/./data/snapshot_8080.json
