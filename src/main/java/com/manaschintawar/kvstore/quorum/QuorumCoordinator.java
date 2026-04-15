@@ -2,6 +2,7 @@ package com.manaschintawar.kvstore.quorum;
 
 import com.manaschintawar.kvstore.topology.ClusterManager;
 import com.manaschintawar.kvstore.topology.NodeInfo;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +21,7 @@ public class QuorumCoordinator {
     private static final Logger log = LoggerFactory.getLogger(QuorumCoordinator.class);
 
     private final ClusterManager clusterManager;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     @Value("${kvstore.quorum.n:3}")
@@ -32,8 +33,9 @@ public class QuorumCoordinator {
     @Value("${kvstore.quorum.r:2}")
     private int R;
 
-    public QuorumCoordinator(ClusterManager clusterManager) {
+    public QuorumCoordinator(ClusterManager clusterManager, RestTemplate restTemplate) {
         this.clusterManager = clusterManager;
+        this.restTemplate = restTemplate;
     }
 
     public boolean write(String key, String value) {
@@ -160,5 +162,10 @@ public class QuorumCoordinator {
             Thread.currentThread().interrupt();
             return false;
         }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdownNow();
     }
 }

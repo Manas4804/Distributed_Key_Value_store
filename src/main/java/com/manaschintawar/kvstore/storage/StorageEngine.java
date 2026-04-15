@@ -1,5 +1,7 @@
 package com.manaschintawar.kvstore.storage;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,7 @@ public class StorageEngine {
     private final WALManager walManager;
     private final SnapshotManager snapshotManager;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public StorageEngine(LocalStorage localStorage, WALManager walManager, SnapshotManager snapshotManager) {
         this.localStorage = localStorage;
@@ -43,16 +46,9 @@ public class StorageEngine {
                 int count = 0;
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    String[] parts = line.split(",", 3);
-                    if (parts.length >= 2) {
-                        String op = parts[0];
-                        String key = parts[1];
-                        String value = parts.length > 2 ? parts[2] : "";
-                        if ("PUT".equals(op)) {
-                            localStorage.put(key, value);
-                        } else if ("DELETE".equals(op)) {
-                            localStorage.delete(key);
-                        }
+                    WALManager.WalEntry entry = parseWalEntry(line);
+                    if (entry != null) {
+                        applyWalEntry(entry);
                         count++;
                     }
                 }
@@ -85,5 +81,34 @@ public class StorageEngine {
         log.info("Taking background snapshot...");
         snapshotManager.saveSnapshot(localStorage.getAll());
         walManager.clearWAL();
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        scheduler.shutdownNow();
+    }
+
+    private WALManager.WalEntry parseWalEntry(String line) {
+        try {
+            return objectMapper.readValue(line, WALManager.WalEntry.class);
+        } catch (Exception ignored) {
+            String[] parts = line.split(",", 3);
+            if (parts.length < 2) {
+                log.warn("Skipping malformed WAL entry: {}", line);
+                return null;
+            }
+            String value = parts.length > 2 ? parts[2] : "";
+            return new WALManager.WalEntry(parts[0], parts[1], value);
+        }
+    }
+
+    private void applyWalEntry(WALManager.WalEntry entry) {
+        if ("PUT".equals(entry.getOperation())) {
+            localStorage.put(entry.getKey(), entry.getValue());
+        } else if ("DELETE".equals(entry.getOperation())) {
+            localStorage.delete(entry.getKey());
+        } else {
+            log.warn("Skipping unknown WAL operation: {}", entry.getOperation());
+        }
     }
 }

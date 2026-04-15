@@ -52,7 +52,10 @@ public class ClusterManager {
     }
 
     public void addOrUpdateNode(NodeInfo node) {
-        nodes.put(node.getNodeId(), node);
+        NodeInfo existing = nodes.put(node.getNodeId(), node);
+        if (existing != null && existing != node) {
+            hashRing.removeNode(existing);
+        }
         hashRing.addNode(node);
     }
 
