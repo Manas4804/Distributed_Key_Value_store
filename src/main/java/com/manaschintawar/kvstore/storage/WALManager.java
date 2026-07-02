@@ -2,6 +2,7 @@ package com.manaschintawar.kvstore.storage;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,10 +46,10 @@ public class WALManager {
         }
     }
 
-    public void append(String operation, String key, String value) {
+    public void append(String operation, String key, String value, long timestamp) {
         lock.writeLock().lock();
         try {
-            String entry = objectMapper.writeValueAsString(new WalEntry(operation, key, value));
+            String entry = objectMapper.writeValueAsString(new WalEntry(operation, key, value, timestamp));
             writer.write(entry);
             writer.newLine();
             writer.flush(); // Ensure it's immediately written to disk
@@ -93,18 +94,21 @@ public class WALManager {
         }
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     static final class WalEntry {
         private String operation;
         private String key;
         private String value;
+        private long timestamp; // 0 = legacy entry written before versioning existed
 
         WalEntry() {
         }
 
-        WalEntry(String operation, String key, String value) {
+        WalEntry(String operation, String key, String value, long timestamp) {
             this.operation = operation;
             this.key = key;
             this.value = value;
+            this.timestamp = timestamp;
         }
 
         public String getOperation() {
@@ -129,6 +133,14 @@ public class WALManager {
 
         public void setValue(String value) {
             this.value = value;
+        }
+
+        public long getTimestamp() {
+            return timestamp;
+        }
+
+        public void setTimestamp(long timestamp) {
+            this.timestamp = timestamp;
         }
     }
 }

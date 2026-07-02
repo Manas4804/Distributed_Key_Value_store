@@ -6,6 +6,8 @@ A highly available, fault-tolerant distributed key-value store inspired by Amazo
 
 - **Consistent Hashing with Virtual Nodes**: Efficient $O(k/n)$ key redistribution. By assigning multiple virtual nodes to each physical server on a hash ring (using MD5), the system achieves uniform data distribution and minimal shuffling when nodes join or leave the cluster.
 - **Quorum-Based Consistency ($R+W>N$)**: Tunable read ($R$) and write ($W$) quorums across replicated nodes ($N$). Guarantees that at least one node in any read quorum has the latest successfully written data, ensuring eventual consistency and high availability even during network partitions.
+- **Versioned Values (Last-Write-Wins)**: Every write is stamped with a coordinator-assigned timestamp. Quorum reads resolve conflicts by returning the record with the **highest timestamp** — not majority vote — so the $R+W>N$ overlap actually guarantees read-your-writes. Deletes are stored as **tombstones**, preventing replicas that missed a delete from resurrecting old values.
+- **Read Repair**: When a quorum read detects a replica holding a stale or missing record, the coordinator pushes the winning record back to it — the same self-healing mechanism used by Cassandra and DynamoDB.
 - **Gossip Protocol Failure Detection**: Decentralized cluster membership. Nodes periodically communicate their state to random peers. If a node fails to send a heartbeat within a threshold, it is suspected dead and automatically evicted from the cluster routing table.
 - **Durability (WAL & Snapshots)**: Zero data loss on crashes. Every mutation is immediately appended to a Write-Ahead Log (WAL) on disk before being applied to the in-memory `ConcurrentHashMap`. Background snapshotting periodically dumps memory to JSON and truncates the WAL for fast recovery.
 
@@ -99,3 +101,24 @@ curl -X DELETE http://localhost:8082/api/v1/kv/myKey
 - Restart the nodes.
 - When the Spring Boot application boots, the `StorageEngine` will parse the `.log` files in the `./data` directory.
 - Perform a `GET` for the data you wrote previously. It will be 100% intact!
+
+---
+
+## ⚠️ Known Limitations & Design Tradeoffs
+
+This project is intentionally scoped to demonstrate core distributed systems concepts. The following are known limitations that would need to be addressed in a production system:
+
+### 1. Last-Write-Wins Relies on Coordinator Clocks
+Conflict resolution uses coordinator-assigned wall-clock timestamps. Under clock skew between coordinators, a "later" write from a node with a slow clock can lose to an "earlier" one. Production systems address this with **vector clocks** (DynamoDB — exposes concurrent siblings to the client) or hybrid logical clocks. LWW is exactly what Cassandra ships by default, with the same caveat.
+
+### 2. Tombstones Are Never Garbage-Collected
+Deleted keys leave tombstones that persist in snapshots forever so that late-arriving stale writes can't resurrect them. Cassandra solves this with `gc_grace_seconds` — tombstones are purged after a window in which all replicas are assumed to have seen the delete.
+
+### 3. Seed Node Bootstrap Uses a Timestamp Grace Period
+During cluster startup, seed nodes are initialized with `lastHeartbeat = now + 30000ms` — a 30-second grace period to prevent them from being evicted before the gossip protocol has had a chance to establish real heartbeats. A more robust solution would be a dedicated node lifecycle state machine with explicit states: `JOINING → ALIVE → SUSPECTED → DEAD`, similar to how Apache Cassandra models node membership via the Phi Accrual Failure Detector.
+
+### 4. No Anti-Entropy / Merkle Trees
+There is no background process to detect and repair divergence between replicas that have been out of sync for a long time (e.g., after a node rejoins following a prolonged outage). Production KV stores use **Merkle trees** to efficiently compare replica state and sync only the differing keys, rather than transferring the entire dataset.
+
+### 5. In-Memory Ring is Not Persisted
+The consistent hash ring is rebuilt from seed node configuration on every restart. In a dynamic cluster where nodes join and leave at runtime, this means a restarted node has no memory of topology changes that occurred while it was offline. A persistent membership log (or integration with a coordination service like etcd/ZooKeeper) would solve this.

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 
 @Component
@@ -34,7 +35,7 @@ public class SnapshotManager {
         snapshotFile = new File(dir, "snapshot_" + port + ".json");
     }
 
-    public void saveSnapshot(Map<String, String> data) {
+    public void saveSnapshot(Map<String, VersionedValue> data) {
         try {
             objectMapper.writeValue(snapshotFile, data);
             log.info("Snapshot saved successfully to {}", snapshotFile.getAbsolutePath());
@@ -43,15 +44,24 @@ public class SnapshotManager {
         }
     }
 
-    public Map<String, String> loadSnapshot() {
+    public Map<String, VersionedValue> loadSnapshot() {
         if (!snapshotFile.exists()) {
             return null;
         }
         try {
-            return objectMapper.readValue(snapshotFile, new TypeReference<Map<String, String>>() {});
+            return objectMapper.readValue(snapshotFile, new TypeReference<Map<String, VersionedValue>>() {});
         } catch (IOException e) {
-            log.error("Failed to load snapshot", e);
-            return null;
+            // Fall back to the legacy (unversioned) snapshot format: Map<String, String>
+            try {
+                Map<String, String> legacy = objectMapper.readValue(snapshotFile, new TypeReference<Map<String, String>>() {});
+                Map<String, VersionedValue> converted = new HashMap<>();
+                legacy.forEach((k, v) -> converted.put(k, new VersionedValue(v, 0L, false)));
+                log.info("Loaded legacy snapshot format ({} keys), converted to versioned records.", converted.size());
+                return converted;
+            } catch (IOException legacyError) {
+                log.error("Failed to load snapshot", e);
+                return null;
+            }
         }
     }
 }

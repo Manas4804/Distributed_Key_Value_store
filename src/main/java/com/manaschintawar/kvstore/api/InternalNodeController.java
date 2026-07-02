@@ -1,6 +1,8 @@
 package com.manaschintawar.kvstore.api;
 
+import com.manaschintawar.kvstore.quorum.QuorumCoordinator;
 import com.manaschintawar.kvstore.storage.StorageEngine;
+import com.manaschintawar.kvstore.storage.VersionedValue;
 import com.manaschintawar.kvstore.topology.GossipRequest;
 import com.manaschintawar.kvstore.topology.GossipService;
 import org.springframework.http.ResponseEntity;
@@ -24,21 +26,25 @@ public class InternalNodeController {
     }
 
     @PutMapping("/kv/{key}")
-    public void putInternal(@PathVariable String key, @RequestBody String value) {
-        storageEngine.put(key, value);
+    public void putInternal(@PathVariable String key,
+                            @RequestBody String value,
+                            @RequestHeader(value = QuorumCoordinator.TIMESTAMP_HEADER, required = false) Long timestamp) {
+        storageEngine.put(key, value, timestamp != null ? timestamp : System.currentTimeMillis());
     }
 
+    /** Returns the full versioned record (including tombstones) so the coordinator can resolve conflicts. */
     @GetMapping("/kv/{key}")
-    public ResponseEntity<String> getInternal(@PathVariable String key) {
-        String value = storageEngine.get(key);
-        if (value == null) {
+    public ResponseEntity<VersionedValue> getInternal(@PathVariable String key) {
+        VersionedValue record = storageEngine.getRecord(key);
+        if (record == null) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(value);
+        return ResponseEntity.ok(record);
     }
 
     @DeleteMapping("/kv/{key}")
-    public void deleteInternal(@PathVariable String key) {
-        storageEngine.delete(key);
+    public void deleteInternal(@PathVariable String key,
+                               @RequestHeader(value = QuorumCoordinator.TIMESTAMP_HEADER, required = false) Long timestamp) {
+        storageEngine.delete(key, timestamp != null ? timestamp : System.currentTimeMillis());
     }
 }

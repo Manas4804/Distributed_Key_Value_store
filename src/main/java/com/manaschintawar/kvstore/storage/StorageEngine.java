@@ -33,7 +33,7 @@ public class StorageEngine {
     public void restore() {
         log.info("Starting restoration process...");
         // 1. Load Snapshot
-        Map<String, String> snapshot = snapshotManager.loadSnapshot();
+        Map<String, VersionedValue> snapshot = snapshotManager.loadSnapshot();
         if (snapshot != null) {
             localStorage.restore(snapshot);
             log.info("Restored {} keys from snapshot.", snapshot.size());
@@ -63,18 +63,48 @@ public class StorageEngine {
         scheduler.scheduleAtFixedRate(this::takeSnapshot, 5, 5, TimeUnit.MINUTES);
     }
 
-    public synchronized void put(String key, String value) {
-        walManager.append("PUT", key, value);
-        localStorage.put(key, value);
+    /** Convenience overload: coordinator normally supplies the timestamp. */
+    public void put(String key, String value) {
+        put(key, value, System.currentTimeMillis());
     }
 
+    /**
+     * Applies a versioned write using last-write-wins: an incoming record older
+     * than the one already stored is ignored. This makes replication and
+     * read-repair idempotent and prevents stale writes from clobbering newer data.
+     */
+    public synchronized void put(String key, String value, long timestamp) {
+        VersionedValue existing = localStorage.getRecord(key);
+        if (existing != null && existing.getTimestamp() >= timestamp) {
+            return; // stale write, ignore
+        }
+        walManager.append("PUT", key, value, timestamp);
+        localStorage.putRecord(key, new VersionedValue(value, timestamp, false));
+    }
+
+    /** Client-facing read: returns null for missing keys and tombstones. */
     public String get(String key) {
         return localStorage.get(key);
     }
 
-    public synchronized void delete(String key) {
-        walManager.append("DELETE", key, null);
-        localStorage.delete(key);
+    /** Replica-facing read: returns the full record, including tombstones. */
+    public VersionedValue getRecord(String key) {
+        return localStorage.getRecord(key);
+    }
+
+    /** Convenience overload: coordinator normally supplies the timestamp. */
+    public void delete(String key) {
+        delete(key, System.currentTimeMillis());
+    }
+
+    /** Deletes are stored as tombstones so missed deletes cannot resurrect values. */
+    public synchronized void delete(String key, long timestamp) {
+        VersionedValue existing = localStorage.getRecord(key);
+        if (existing != null && existing.getTimestamp() >= timestamp) {
+            return; // stale delete, ignore
+        }
+        walManager.append("DELETE", key, null, timestamp);
+        localStorage.putRecord(key, new VersionedValue(null, timestamp, true));
     }
 
     public synchronized void takeSnapshot() {
@@ -98,15 +128,20 @@ public class StorageEngine {
                 return null;
             }
             String value = parts.length > 2 ? parts[2] : "";
-            return new WALManager.WalEntry(parts[0], parts[1], value);
+            return new WALManager.WalEntry(parts[0], parts[1], value, 0L);
         }
     }
 
     private void applyWalEntry(WALManager.WalEntry entry) {
+        VersionedValue existing = localStorage.getRecord(entry.getKey());
+        // Legacy entries (timestamp 0) are applied in log order; versioned entries use LWW.
+        if (entry.getTimestamp() > 0 && existing != null && existing.getTimestamp() >= entry.getTimestamp()) {
+            return;
+        }
         if ("PUT".equals(entry.getOperation())) {
-            localStorage.put(entry.getKey(), entry.getValue());
+            localStorage.putRecord(entry.getKey(), new VersionedValue(entry.getValue(), entry.getTimestamp(), false));
         } else if ("DELETE".equals(entry.getOperation())) {
-            localStorage.delete(entry.getKey());
+            localStorage.putRecord(entry.getKey(), new VersionedValue(null, entry.getTimestamp(), true));
         } else {
             log.warn("Skipping unknown WAL operation: {}", entry.getOperation());
         }
